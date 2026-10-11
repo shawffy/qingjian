@@ -18,6 +18,7 @@ class QingjianInputMethodService : InputMethodService() {
     private val fallbackComposition = StringBuilder()
     private var engineReady = false
     private var englishMode = false
+
     private external fun nativeInit(): Boolean
     private external fun nativePushChar(ch: Char)
     private external fun nativeBackspace()
@@ -41,16 +42,20 @@ class QingjianInputMethodService : InputMethodService() {
         initializeEngine()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(8, 8, 8, 8)
+            setPadding(8.dp(), 8.dp(), 8.dp(), 8.dp())
             setBackgroundColor(Color.rgb(245, 245, 245))
         }
+
         compositionView = TextView(this).apply {
             textSize = 18f
             setTextColor(Color.DKGRAY)
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(12, 8, 12, 8)
+            setPadding(12.dp(), 8.dp(), 12.dp(), 8.dp())
         }
-        root.addView(compositionView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()))
+        root.addView(compositionView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()
+        ))
+
         candidateRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -64,56 +69,75 @@ class QingjianInputMethodService : InputMethodService() {
             listOf("⇧", "z", "x", "c", "v", "b", "n", "m", "⌫"),
             listOf("?123", ",", "中/英", "空格", "。", "↵")
         )
+
         rows.forEach { row ->
             val line = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
             }
             row.forEach { key ->
-                line.addView(makeKey(key) { handleKey(key) }, LinearLayout.LayoutParams(0, 46.dp(), if (key == "空格") 2f else 1f).apply {
-                    setMargins(2.dp(), 3.dp(), 2.dp(), 3.dp())
-                })
+                line.addView(
+                    makeKey(key) { handleKey(key) },
+                    LinearLayout.LayoutParams(
+                        0, 46.dp(), if (key == "空格") 2f else 1f
+                    ).apply {
+                        setMargins(2.dp(), 3.dp(), 2.dp(), 3.dp())
+                    }
+                )
             }
             root.addView(line)
         }
         return root
     }
 
-    private fun makeKey(label: String, action: () -> Unit): Button = Button(this).apply {
-        text = label
-        textSize = 15f
-        isAllCaps = false
-        setTextColor(Color.rgb(35, 35, 35))
-        background = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadius = 7.dp().toFloat()
-            setStroke(1.dp(), Color.LTGRAY)
+    private fun makeKey(label: String, action: () -> Unit): Button {
+        return Button(this).apply {
+            text = label
+            textSize = 15f
+            isAllCaps = false
+            setTextColor(Color.rgb(35, 35, 35))
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 7.dp().toFloat()
+                setStroke(1.dp(), Color.LTGRAY)
+            }
+            setPadding(2.dp(), 0, 2.dp(), 0)
+            setOnClickListener { action() }
         }
-        setPadding(2, 0, 2, 0)
-        setOnClickListener { action() }
     }
 
     private fun handleKey(key: String) {
         val connection: InputConnection = currentInputConnection ?: return
+
         when (key) {
             "⌫" -> {
-                if (engineReady) {
+                if (englishMode) {
+                    connection.deleteSurroundingText(1, 0)
+                } else if (engineReady) {
                     if (nativeComposition().isNotEmpty()) {
                         nativeBackspace()
                         refreshFromEngine()
-                    } else connection.deleteSurroundingText(1, 0)
+                    } else {
+                        connection.deleteSurroundingText(1, 0)
+                    }
                 } else if (fallbackComposition.isNotEmpty()) {
                     fallbackComposition.deleteCharAt(fallbackComposition.length - 1)
                     updateFallbackComposition()
-                } else connection.deleteSurroundingText(1, 0)
+                } else {
+                    connection.deleteSurroundingText(1, 0)
+                }
             }
+
             "空格" -> {
-                if (engineReady) {
+                if (englishMode) {
                     connection.commitText(" ", 1)
-               } else if (engineReady) {
+                } else if (engineReady) {
                     val candidates = currentCandidates()
-                    val result = if (candidates.isNotEmpty()) nativeCommit(0)
-                    else nativeComposition()
+                    val result = if (candidates.isNotEmpty()) {
+                        nativeCommit(0)
+                    } else {
+                        nativeComposition()
+                    }
                     if (result.isNotEmpty()) connection.commitText(result, 1)
                     nativeClear()
                     refreshFromEngine()
@@ -121,74 +145,108 @@ class QingjianInputMethodService : InputMethodService() {
                     connection.commitText(fallbackComposition.toString(), 1)
                     fallbackComposition.clear()
                     updateFallbackComposition()
-                } else connection.commitText(" ", 1)
+                } else {
+                    connection.commitText(" ", 1)
+                }
             }
+
             "↵" -> {
                 connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
                 clearComposition()
             }
+
             "中/英" -> {
                 if (engineReady) nativeClear()
                 fallbackComposition.clear()
                 englishMode = !englishMode
                 refreshFromEngine()
             }
+
             "?123", "⇧" -> Unit
             "。" -> connection.commitText("。", 1)
             "," -> connection.commitText("，", 1)
-            else -> if (key.length == 1 && key[0].isLetter()) {
-                 if (englishMode) {
-                    connection.commitText(key, 1)
-                 if (englishMode) {
-                    connection.commitText(key, 1)
-                    refreshFromEngine()
-                } else {
-                    fallbackComposition.append(key)
-                    updateFallbackComposition()
+
+            else -> {
+                if (key.length == 1 && key[0].isLetter()) {
+                    if (englishMode) {
+                        connection.commitText(key, 1)
+                    } else if (engineReady) {
+                        nativePushChar(key[0])
+                        refreshFromEngine()
+                    } else {
+                        fallbackComposition.append(key)
+                        updateFallbackComposition()
+                    }
                 }
             }
         }
     }
 
-    private fun currentCandidates(): List<String> = if (!engineReady) emptyList() else
-        nativeCandidates().split("\t").filter { it.isNotBlank() }
+    private fun currentCandidates(): List<String> {
+        if (!engineReady) return emptyList()
+        return nativeCandidates().split('\t').filter { it.isNotBlank() }
+    }
 
     private fun refreshFromEngine() {
         if (!::compositionView.isInitialized || !::candidateRow.isInitialized) return
-        val composing = if (engineReady) nativeComposition() else fallbackComposition.toString()
+
+        val composing = if (engineReady) {
+            nativeComposition()
+        } else {
+            fallbackComposition.toString()
+        }
+
         compositionView.text = when {
+            englishMode -> "青简输入法 · English"
             !engineReady -> "青简输入法 · 引擎未加载"
             composing.isNotEmpty() -> composing
             else -> "青简输入法 · Rust"
         }
+
         candidateRow.removeAllViews()
-        val candidates = currentCandidates()
-        candidates.forEachIndexed { index, word ->
-            candidateRow.addView(makeKey(word) {
-                val connection = currentInputConnection ?: return@makeKey
-                if (engineReady) {
-                    val committed = nativeCommit(index)
-                    if (committed.isNotEmpty()) connection.commitText(committed, 1)
-                    refreshFromEngine()
-                }
-            }, LinearLayout.LayoutParams(0, 44.dp(), 1f).apply {
-                setMargins(1.dp(), 0, 1.dp(), 0)
-            })
-        }
-        if (!engineReady) {
-            candidateRow.addView(TextView(this).apply {
-                text = "请检查原生库与词库"
-                textSize = 13f
-                setTextColor(Color.DKGRAY)
-                gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()))
+        if (!englishMode) {
+            val candidates = currentCandidates()
+            candidates.forEachIndexed { index, word ->
+                candidateRow.addView(
+                    makeKey(word) {
+                        val connection = currentInputConnection ?: return@makeKey
+                        if (engineReady) {
+                            val committed = nativeCommit(index)
+                            if (committed.isNotEmpty()) connection.commitText(committed, 1)
+                            refreshFromEngine()
+                        }
+                    },
+                    LinearLayout.LayoutParams(0, 44.dp(), 1f).apply {
+                        setMargins(1.dp(), 0, 1.dp(), 0)
+                    }
+                )
+            }
+
+            if (!engineReady) {
+                candidateRow.addView(
+                    TextView(this).apply {
+                        text = "请检查原生库与词库"
+                        textSize = 13f
+                        setTextColor(Color.DKGRAY)
+                        gravity = Gravity.CENTER
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()
+                    )
+                )
+            }
         }
     }
 
     private fun updateFallbackComposition() {
-        if (::compositionView.isInitialized) compositionView.text =
-            if (fallbackComposition.isEmpty()) "青简输入法 · 引擎未加载" else fallbackComposition.toString()
+        if (::compositionView.isInitialized) {
+            compositionView.text = if (fallbackComposition.isEmpty()) {
+                "青简输入法 · 引擎未加载"
+            } else {
+                fallbackComposition.toString()
+            }
+        }
     }
 
     private fun clearComposition() {
@@ -198,5 +256,6 @@ class QingjianInputMethodService : InputMethodService() {
         if (!engineReady) updateFallbackComposition()
     }
 
-    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
+    private fun Int.dp(): Int =
+        (this * resources.displayMetrics.density).toInt()
 }
