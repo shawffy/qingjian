@@ -17,6 +17,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "QingjianAndroid"
+rootProject.name = "QingjianAndroid“
 
 include(":app")
