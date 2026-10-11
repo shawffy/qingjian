@@ -17,7 +17,7 @@ class QingjianInputMethodService : InputMethodService() {
     private lateinit var candidateRow: LinearLayout
     private val fallbackComposition = StringBuilder()
     private var engineReady = false
-
+    private var englishMode = false
     private external fun nativeInit(): Boolean
     private external fun nativePushChar(ch: Char)
     private external fun nativeBackspace()
@@ -109,8 +109,11 @@ class QingjianInputMethodService : InputMethodService() {
             }
             "空格" -> {
                 if (engineReady) {
+                    connection.commitText(" ", 1)
+               } else if (engineReady) {
                     val candidates = currentCandidates()
-                    val result = if (candidates.isNotEmpty()) nativeCommit(0) else nativeComposition()
+                    val result = if (candidates.isNotEmpty()) nativeCommit(0)
+                    else nativeComposition()
                     if (result.isNotEmpty()) connection.commitText(result, 1)
                     nativeClear()
                     refreshFromEngine()
@@ -125,12 +128,20 @@ class QingjianInputMethodService : InputMethodService() {
                 connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
                 clearComposition()
             }
-            "中/英", "?123", "⇧" -> Unit
+            "中/英" -> {
+                if (engineReady) nativeClear()
+                fallbackComposition.clear()
+                englishMode = !englishMode
+                refreshFromEngine()
+            }
+            "?123", "⇧" -> Unit
             "。" -> connection.commitText("。", 1)
             "," -> connection.commitText("，", 1)
             else -> if (key.length == 1 && key[0].isLetter()) {
-                if (engineReady) {
-                    nativePushChar(key[0])
+                 if (englishMode) {
+                    connection.commitText(key, 1)
+                 if (englishMode) {
+                    connection.commitText(key, 1)
                     refreshFromEngine()
                 } else {
                     fallbackComposition.append(key)
