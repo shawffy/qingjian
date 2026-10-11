@@ -1,3 +1,4 @@
+```yaml
 name: Android ARM64 APK
 
 on:
@@ -48,12 +49,29 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Android APK
-        run: gradle -p android assembleDebug
+      - name: Prepare signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" \
+            | base64 --decode > "$RUNNER_TEMP/qingjian-release.jks"
+          test -s "$RUNNER_TEMP/qingjian-release.jks"
 
-      - name: Upload APK
+      - name: Build signed Release APK
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/qingjian-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          gradle -p android assembleRelease
+          rm -f "$ANDROID_KEYSTORE_FILE"
+
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: qingjian-android-arm64-debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: qingjian-android-arm64-release
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+```
