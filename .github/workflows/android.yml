@@ -73,4 +73,3 @@ jobs:
           name: qingjian-android-arm64-release
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-```
